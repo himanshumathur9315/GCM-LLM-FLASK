@@ -8,7 +8,7 @@ import threading
 
 # Configuration
 BASE_MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.2"
-LORA_ADAPTER_PATH = "./gcm-lora-4171"
+LORA_ADAPTER_PATH = "./gcm-lora-4171-2"
 model = None
 tokenizer = None
 
@@ -96,6 +96,17 @@ def predict():
     except Exception as e:
         print(f"An error occurred: {e}")
         return jsonify({"error": "Failed to generate a response."}), 500
+
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    """
+    Health check endpoint.
+    """
+    if model is None or tokenizer is None:
+        return jsonify({"status": "unhealthy", "error": "Model is not loaded yet."}), 503
+
+    return jsonify({"status": "healthy"}), 200
 
 # --- 3. Run the App ---
 

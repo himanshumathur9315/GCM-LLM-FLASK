@@ -20,7 +20,7 @@ services:
     # This is a useful optimization: if you retrain your model, you can just
     # restart the container without rebuilding the entire Docker image.
     volumes:
-      - ./gcm-lora-4171:/app/gcm-lora-4171
+      - ./gcm-lora-4171-2:/app/gcm-lora-4171-2
     # This 'deploy' section is the modern way to request GPU resources.
     # It requires the NVIDIA Container Toolkit to be installed on the host.
     deploy:
