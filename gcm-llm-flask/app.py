@@ -9,7 +9,7 @@ import traceback
 
 # Configuration
 BASE_MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.2"
-LORA_ADAPTER_PATH = "./gcm-lora-4171-2"
+LORA_ADAPTER_PATH = "./gcm-lora-11-09-25"  # Path to the trained LoRA adapter
 
 # --- State Variables ---
 model = None

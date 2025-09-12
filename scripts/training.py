@@ -12,8 +12,8 @@ from peft import LoraConfig, get_peft_model
 
 
 BASE_MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.2"
-DATA_SET_FILE = "gcm_lora_dataset.jsonl"
-TRAINED_MODEL_PATH = "./gcm-lora-4171-2"
+DATA_SET_FILE = "merged.jsonl"
+TRAINED_MODEL_PATH = "./greymatter-confluence-lora-12-09-25"
 # ---------------------------
 # 1. Model & Tokenizer
 # ---------------------------
@@ -135,7 +135,7 @@ training_args = TrainingArguments(
     logging_steps=10,
     save_steps=50,         # save more frequently since dataset is small
     save_total_limit=2,
-    report_to="none"
+    report_to="tensorboard"
 )
 
 
