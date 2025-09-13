@@ -1,4 +1,6 @@
 import torch
+import transformers
+import inspect
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -9,13 +11,17 @@ from transformers import (
 )
 from datasets import load_dataset
 from peft import LoraConfig, get_peft_model
+from pkg_resources import parse_version
+
+# --- Add a version check for the transformers library ---
+print(f"Using transformers version: {transformers.__version__}")
 
 
 BASE_MODEL_ID = "mistralai/Mistral-7B-Instruct-v0.2"
 # --- MODIFIED: Define separate files for training and validation ---
-TRAIN_DATA_FILE = "train.jsonl"      # <-- MODIFIED: Path to your training data
-EVAL_DATA_FILE = "validation.jsonl"  # <-- NEW: Path to your validation data
-TRAINED_MODEL_PATH = "./greymatter-confluence-lora-12-09-25"
+TRAIN_DATA_FILE = "training.jsonl"
+EVAL_DATA_FILE = "validation.jsonl"
+TRAINED_MODEL_PATH = "./simulator-confluence-lora-13-09-25"
 # ---------------------------
 # 1. Model & Tokenizer
 # ---------------------------
@@ -56,8 +62,8 @@ model = get_peft_model(model, lora_config)
 # 3. Dataset
 # ---------------------------
 # --- MODIFIED: Load both training and validation sets ---
-data_files = {"train": TRAIN_DATA_FILE, "validation": EVAL_DATA_FILE} # <-- MODIFIED
-dataset = load_dataset("json", data_files=data_files)                 # <-- MODIFIED
+data_files = {"train": TRAIN_DATA_FILE, "validation": EVAL_DATA_FILE}
+dataset = load_dataset("json", data_files=data_files)
 
 def format_prompt(example):
     # The official Mistral Instruct template
@@ -70,24 +76,23 @@ def format_prompt(example):
 # Apply the formatting to both train and validation splits
 formatted_dataset = dataset.map(format_prompt)
 
-def tokenize_function(examples):
+# --- MODIFIED: Tokenize both splits using the working script's method ---
+def tokenize_text(example):
     return tokenizer(
-        examples["text"],
+        example["text"],
         truncation=True,
         padding="max_length",
         max_length=512
     )
 
-# Tokenize both datasets
-tokenized_datasets = formatted_dataset.map(
-    tokenize_function,
-    batched=True, # Process in batches for efficiency
-    remove_columns=dataset["train"].column_names + ["text"] # Clean up old columns
+train_dataset = formatted_dataset["train"].map(
+    tokenize_text,
+    remove_columns=formatted_dataset["train"].column_names
 )
-
-# Assign to final variables
-train_dataset = tokenized_datasets["train"]
-eval_dataset = tokenized_datasets["validation"] # <-- NEW: Create the evaluation dataset
+eval_dataset = formatted_dataset["validation"].map(
+    tokenize_text,
+    remove_columns=formatted_dataset["validation"].column_names
+)
 
 # ---------------------------
 # 4. Training Setup
@@ -106,30 +111,44 @@ max_steps = steps_per_epoch * epochs
 
 print(f"Training for {epochs} epochs = {max_steps} steps total")
 
-training_args = TrainingArguments(
-    output_dir="./gcm-lora-out",
-    per_device_train_batch_size=per_device_train_batch_size,
-    gradient_accumulation_steps=gradient_accumulation_steps,
-    warmup_steps=10,
-    max_steps=max_steps,
-    learning_rate=2e-4,
-    fp16=True,
-    logging_steps=10,
-    save_steps=50,
-    save_total_limit=2,
-    # --- NEW: Add evaluation arguments ---
-    evaluation_strategy="epoch",          # <-- NEW: Run evaluation at the end of each epoch
-    per_device_eval_batch_size=per_device_train_batch_size, # <-- NEW: Use same batch size for eval
-    report_to="tensorboard"
-)
+# --- DEFINITIVE FIX: Use environment-aware arguments ---
+common_args = {
+    "output_dir": "./gcm-lora-out",
+    "per_device_train_batch_size": per_device_train_batch_size,
+    "gradient_accumulation_steps": gradient_accumulation_steps,
+    "warmup_steps": 10,
+    "max_steps": max_steps,
+    "learning_rate": 2e-4,
+    "fp16": True,
+    "logging_steps": 10,
+    "save_steps": steps_per_epoch,
+    "save_total_limit": 2,
+    "report_to": "tensorboard"
+}
+
+# --- DEFINITIVE FIX: Dynamically select the correct argument name based on your diagnostic test ---
+training_args_signature = inspect.signature(TrainingArguments).parameters
+if "eval_strategy" in training_args_signature:
+    print("Using 'eval_strategy' for evaluation strategy.")
+    common_args["eval_strategy"] = "epoch"
+else:
+    print("Using 'evaluation_strategy' for evaluation strategy.")
+    common_args["evaluation_strategy"] = "epoch"
+
+# Add the per_device_eval_batch_size argument, which is consistent across versions
+common_args["per_device_eval_batch_size"] = per_device_train_batch_size
+
+training_args = TrainingArguments(**common_args)
+
 
 data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
+# --- MODIFIED: Add eval_dataset to the Trainer ---
 trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=train_dataset,
-    eval_dataset=eval_dataset,  # <-- NEW: Pass the validation dataset to the Trainer
+    eval_dataset=eval_dataset,  # <-- ADDED
     data_collator=data_collator
 )
 
